@@ -88,14 +88,24 @@ export const useJSAPILoader = (options: JSAPILoaderOptions = {}): JSAPILoaderRes
         loadedRef.current = true
         setIsLoaded(true)
         onLoadRef.current?.()
-      } else {
-        existingScript.addEventListener('load', () => {
-          loadedRef.current = true
-          setIsLoaded(true)
-          onLoadRef.current?.()
-        })
+        return
       }
-      return
+
+      // The listener is attached to a script this hook does not own, so it
+      // outlives the effect unless it is removed explicitly: without the
+      // cleanup below it would leak on unmount, and a dependency change would
+      // stack a second listener on the same element.
+      const handleExistingScriptLoad = () => {
+        loadedRef.current = true
+        setIsLoaded(true)
+        onLoadRef.current?.()
+      }
+
+      existingScript.addEventListener('load', handleExistingScriptLoad)
+
+      return () => {
+        existingScript.removeEventListener('load', handleExistingScriptLoad)
+      }
     }
 
     setIsLoading(true)

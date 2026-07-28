@@ -89,6 +89,76 @@ describe('useJSAPILoader', () => {
     expect(scripts.length).toBe(1)
   })
 
+  describe('existing script that has not finished loading', () => {
+    const addPendingScript = () => {
+      const script = document.createElement('script')
+      script.src = 'https://gwk.gopayapi.com/sdk/stable/gp-container.min.js'
+      document.head.appendChild(script)
+      return script
+    }
+
+    it('should resolve when the existing script finishes loading', async () => {
+      const existingScript = addPendingScript()
+      const onLoad = vi.fn()
+
+      const { result } = renderHook(() => useJSAPILoader({ onLoad }))
+
+      expect(result.current.isLoaded).toBe(false)
+      expect(document.querySelectorAll('script').length).toBe(1)
+
+      existingScript.dispatchEvent(new Event('load'))
+
+      await waitFor(() => {
+        expect(result.current.isLoaded).toBe(true)
+        expect(onLoad).toHaveBeenCalledTimes(1)
+      })
+    })
+
+    it('should not invoke onLoad after unmount', () => {
+      const existingScript = addPendingScript()
+      const onLoad = vi.fn()
+
+      const { unmount } = renderHook(() => useJSAPILoader({ onLoad }))
+
+      unmount()
+      existingScript.dispatchEvent(new Event('load'))
+
+      expect(onLoad).not.toHaveBeenCalled()
+    })
+
+    it('should not stack listeners when a dependency changes', () => {
+      const existingScript = addPendingScript()
+      const onLoad = vi.fn()
+
+      const { rerender } = renderHook(
+        ({ async }: { async: boolean }) => useJSAPILoader({ onLoad, async }),
+        { initialProps: { async: true } }
+      )
+
+      rerender({ async: false })
+      rerender({ async: true })
+
+      existingScript.dispatchEvent(new Event('load'))
+
+      expect(onLoad).toHaveBeenCalledTimes(1)
+    })
+
+    it('should not stack listeners across re-renders with inline callbacks', () => {
+      const existingScript = addPendingScript()
+      const onLoad = vi.fn()
+
+      const { rerender } = renderHook(() =>
+        useJSAPILoader({ onLoad: () => onLoad(), skipIfExists: () => false })
+      )
+
+      for (let i = 0; i < 4; i++) rerender()
+
+      existingScript.dispatchEvent(new Event('load'))
+
+      expect(onLoad).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('script stability across re-renders', () => {
     it('should not re-append the script when callback identities change', () => {
       const { rerender } = renderHook(() =>
