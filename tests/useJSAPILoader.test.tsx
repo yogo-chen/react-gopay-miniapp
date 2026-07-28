@@ -89,6 +89,93 @@ describe('useJSAPILoader', () => {
     expect(scripts.length).toBe(1)
   })
 
+  describe('script stability across re-renders', () => {
+    it('should not re-append the script when callback identities change', () => {
+      const { rerender } = renderHook(() =>
+        useJSAPILoader({
+          onLoad: () => {},
+          onError: () => {},
+          skipIfExists: () => false
+        })
+      )
+
+      const first = document.querySelector('script')
+      expect(first).toBeTruthy()
+
+      rerender()
+
+      const scripts = document.querySelectorAll('script')
+      expect(scripts.length).toBe(1)
+      expect(scripts[0]).toBe(first)
+      expect(first?.isConnected).toBe(true)
+    })
+
+    it('should keep the same script across many re-renders before load', () => {
+      const { rerender } = renderHook(() => useJSAPILoader({ onLoad: () => {} }))
+
+      const first = document.querySelector('script')
+
+      for (let i = 0; i < 5; i++) rerender()
+
+      expect(document.querySelectorAll('script').length).toBe(1)
+      expect(document.querySelector('script')).toBe(first)
+      expect(first?.isConnected).toBe(true)
+    })
+
+    it('should still remove the script on unmount', () => {
+      const { unmount } = renderHook(() => useJSAPILoader())
+
+      expect(document.querySelector('script')).toBeTruthy()
+
+      unmount()
+
+      expect(document.querySelector('script')).toBe(null)
+    })
+
+    const latestCallbackCases = [
+      { name: 'onLoad', event: 'load' },
+      { name: 'onError', event: 'error' }
+    ] as const
+
+    latestCallbackCases.forEach(({ name, event }) => {
+      it(`should invoke the latest ${name} after a re-render`, async () => {
+        const stale = vi.fn()
+        const latest = vi.fn()
+
+        const { rerender } = renderHook(
+          ({ cb }: { cb: () => void }) => useJSAPILoader({ [name]: cb }),
+          { initialProps: { cb: stale } }
+        )
+
+        rerender({ cb: latest })
+
+        document.querySelector('script')?.dispatchEvent(new Event(event))
+
+        await waitFor(() => {
+          expect(latest).toHaveBeenCalled()
+        })
+        expect(stale).not.toHaveBeenCalled()
+      })
+    })
+
+    it('should use the latest skipIfExists on a dependency-driven re-run', () => {
+      const skipIfExists = vi.fn(() => false)
+
+      const { rerender } = renderHook(
+        ({ async }: { async: boolean }) => useJSAPILoader({ skipIfExists, async }),
+        { initialProps: { async: true } }
+      )
+
+      expect(document.querySelector('script')?.async).toBe(true)
+
+      skipIfExists.mockReturnValue(true)
+      rerender({ async: false })
+
+      expect(skipIfExists).toHaveBeenLastCalledWith()
+      expect(skipIfExists.mock.results.at(-1)?.value).toBe(true)
+    })
+  })
+
   describe('script attributes', () => {
     const testCases = [
       { async: true, defer: false, name: 'async' },

@@ -56,13 +56,29 @@ export const useJSAPILoader = (options: JSAPILoaderOptions = {}): JSAPILoaderRes
   const scriptRef = useRef<HTMLScriptElement | null>(null)
   const loadedRef = useRef<boolean>(false)
 
+  const onLoadRef = useRef(onLoad)
+  const onErrorRef = useRef(onError)
+  const skipIfExistsRef = useRef(skipIfExists)
+
+  // Callbacks live in refs so they are not part of the loader effect's
+  // dependencies. Callers commonly pass inline closures, whose identity changes
+  // on every render; depending on them would re-run the effect, and its cleanup
+  // removes the script tag it appended. The SDK would then be torn down and
+  // re-appended on every render until it finished loading.
+  useEffect(() => {
+    onLoadRef.current = onLoad
+    onErrorRef.current = onError
+    skipIfExistsRef.current = skipIfExists
+  }, [onLoad, onError, skipIfExists])
+
   useEffect(() => {
     if (loadedRef.current) return
 
-    if (skipIfExists && skipIfExists()) {
+    const skipIfExistsFn = skipIfExistsRef.current
+    if (skipIfExistsFn && skipIfExistsFn()) {
       loadedRef.current = true
       setIsLoaded(true)
-      onLoad?.()
+      onLoadRef.current?.()
       return
     }
 
@@ -71,12 +87,12 @@ export const useJSAPILoader = (options: JSAPILoaderOptions = {}): JSAPILoaderRes
       if (existingScript.hasAttribute('data-loaded')) {
         loadedRef.current = true
         setIsLoaded(true)
-        onLoad?.()
+        onLoadRef.current?.()
       } else {
         existingScript.addEventListener('load', () => {
           loadedRef.current = true
           setIsLoaded(true)
-          onLoad?.()
+          onLoadRef.current?.()
         })
       }
       return
@@ -94,14 +110,14 @@ export const useJSAPILoader = (options: JSAPILoaderOptions = {}): JSAPILoaderRes
       loadedRef.current = true
       setIsLoaded(true)
       setIsLoading(false)
-      onLoad?.()
+      onLoadRef.current?.()
     }
 
     script.onerror = (err) => {
       const errorMsg = `Failed to load script: ${GOPAY_SDK_URL}`
       setError(errorMsg)
       setIsLoading(false)
-      onError?.(err)
+      onErrorRef.current?.(err)
       console.error(errorMsg, err)
     }
 
@@ -113,7 +129,7 @@ export const useJSAPILoader = (options: JSAPILoaderOptions = {}): JSAPILoaderRes
         scriptRef.current.parentNode.removeChild(scriptRef.current)
       }
     }
-  }, [async, defer, onLoad, onError, skipIfExists])
+  }, [async, defer])
 
   return {
     isLoaded,

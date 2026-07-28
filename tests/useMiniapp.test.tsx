@@ -37,6 +37,50 @@ describe('useMiniapp', () => {
     expect(result.current.isLoading).toBe(true)
   })
 
+  describe('SDK script stability', () => {
+    it('should not re-append the SDK script when re-rendered before ready', () => {
+      const { rerender } = renderHook(() => useMiniapp())
+
+      const first = document.querySelector('script')
+      expect(first).toBeTruthy()
+
+      rerender()
+
+      const scripts = document.querySelectorAll('script')
+      expect(scripts.length).toBe(1)
+      expect(scripts[0]).toBe(first)
+      expect(first?.isConnected).toBe(true)
+    })
+
+    it('should not re-append the SDK script when the caller passes inline callbacks', () => {
+      const { rerender } = renderHook(() =>
+        useMiniapp({ onReady: () => {}, onError: () => {} })
+      )
+
+      const first = document.querySelector('script')
+
+      for (let i = 0; i < 3; i++) rerender()
+
+      expect(document.querySelectorAll('script').length).toBe(1)
+      expect(document.querySelector('script')).toBe(first)
+      expect(first?.isConnected).toBe(true)
+    })
+
+    it('should fire onReady once across re-renders', async () => {
+      const onReady = vi.fn()
+      const { rerender } = renderHook(() => useMiniapp({ onReady }))
+
+      rerender()
+      rerender()
+
+      loadSDK()
+
+      await waitFor(() => {
+        expect(onReady).toHaveBeenCalledTimes(1)
+      })
+    })
+  })
+
   it('should become ready when SDK loads', async () => {
     const onReady = vi.fn()
     const { result } = renderHook(() => useMiniapp({ onReady }))

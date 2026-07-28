@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     root: '.',
+    setupFiles: ['./tests/setup.ts'],
     browser: {
       enabled: true,
       provider: playwright(),
