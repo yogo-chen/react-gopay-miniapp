@@ -126,6 +126,37 @@ describe('useJSAPILoader', () => {
       expect(onLoad).not.toHaveBeenCalled()
     })
 
+    it('should detect when external script already loaded (without data-loaded marker)', async () => {
+      // Simulate external script that already finished loading before hook runs
+      // This can happen when script is injected early and finishes loading before React hydrates
+      const existingScript = document.createElement('script')
+      existingScript.src = 'https://gwk.gopayapi.com/sdk/stable/gp-container.min.js'
+      document.head.appendChild(existingScript)
+      
+      // Mark as loaded in a way that skipIfExists can detect
+      // In real scenarios, this would be checked via window.gpContainer or other indicators
+      const onLoad = vi.fn()
+      
+      // Simulate the script has already loaded by setting skipIfExists to detect it
+      const { result } = renderHook(() => 
+        useJSAPILoader({ 
+          onLoad,
+          skipIfExists: () => {
+            // Simulate detection that script is already present and loaded
+            return !!document.querySelector('script[src*="gp-container"]')
+          }
+        })
+      )
+
+      await waitFor(() => {
+        expect(result.current.isLoaded).toBe(true)
+        expect(onLoad).toHaveBeenCalled()
+      })
+
+      // Should not create duplicate
+      expect(document.querySelectorAll('script').length).toBe(1)
+    })
+
     it('should not stack listeners when a dependency changes', () => {
       const existingScript = addPendingScript()
       const onLoad = vi.fn()

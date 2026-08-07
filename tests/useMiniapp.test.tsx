@@ -79,6 +79,30 @@ describe('useMiniapp', () => {
         expect(onReady).toHaveBeenCalledTimes(1)
       })
     })
+
+    it('should detect and use externally-loaded script without creating duplicate', async () => {
+      // Simulate external script already in DOM (e.g., loaded via beforeInteractive)
+      const externalScript = document.createElement('script')
+      externalScript.src = 'https://gwk.gopayapi.com/sdk/stable/gp-container.min.js'
+      document.head.appendChild(externalScript)
+
+      const onReady = vi.fn()
+      const { result } = renderHook(() => useMiniapp({ onReady }))
+
+      // Should detect existing script and not create a duplicate
+      const scripts = document.querySelectorAll('script')
+      expect(scripts.length).toBe(1)
+      expect(scripts[0]).toBe(externalScript)
+
+      // Simulate external script loading
+      mockGpContainer()
+      externalScript.dispatchEvent(new Event('load'))
+
+      await waitFor(() => {
+        expect(result.current.isReady).toBe(true)
+        expect(onReady).toHaveBeenCalled()
+      })
+    })
   })
 
   it('should become ready when SDK loads', async () => {

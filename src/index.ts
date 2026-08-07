@@ -176,7 +176,17 @@ export const useMiniapp = (options: GopayMiniappOptions = {}): GoPayMiniappResul
   const readyRef = useRef<boolean>(false)
 
   const { isLoading, error } = useJSAPILoader({
-      skipIfExists: () => typeof window.gpContainer !== 'undefined',
+      skipIfExists: () => {
+        // Container already available
+        if (typeof window.gpContainer !== 'undefined') {
+          return true
+        }
+        
+        // Script already in DOM (externally loaded)
+        // useJSAPILoader will attach a load listener to properly wait for it
+        const existingScript = document.querySelector(`script[src="${GOPAY_SDK_URL}"]`)
+        return existingScript !== null
+      },
       onLoad: () => {
         if (!readyRef.current) {
           readyRef.current = true
